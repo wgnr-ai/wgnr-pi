@@ -1,0 +1,36 @@
+{
+  "name": "wgnr-pi",
+  "version": "1.0.0",
+  "description": "A dual-engine web UI for Pi Coding Agent with kelle.ai integration — by wgnr.ai",
+  "type": "module",
+  "bin": {
+    "wgnr-pi": "./bin/wgnr-pi.js"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "dompurify": "^3.3.3",
+    "express": "^5.1.0",
+    "marked": "^18.0.0",
+    "ws": "^8.18.0"
+  },
+  "keywords": [
+    "pi",
+    "pi-coding-agent",
+    "coding-agent",
+    "web-ui",
+    "chat",
+    "ai",
+    "kelle-ai",
+    "wgnr-ai"
+  ],
+  "author": "wgnr.ai",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wgnr-ai/wgnr-pi.git"
+  },
+  "homepage": "https://github.com/wgnr-ai/wgnr-pi#readme"
+}
