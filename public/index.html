@@ -699,8 +699,11 @@ function renderSessionList(sessions, activeFile) {
     item.addEventListener("click", () => {
       if (item.dataset.file !== currentSessionFile) {
         switchSession(item.dataset.file);
-        if (window.innerWidth <= 768) { sidebarOpen = false; applySidebarState(); }
+      } else if (ws?.readyState === 1 && !streaming) {
+        // Same session — reload history in case it was lost
+        ws.send(JSON.stringify({type:"load_history"}));
       }
+      if (window.innerWidth <= 768) { sidebarOpen = false; applySidebarState(); }
     });
     item.addEventListener("dblclick", e => { e.stopPropagation(); startRename(item); });
   });
@@ -950,7 +953,6 @@ function connect() {
   ws.onopen = () => {
     console.log("[WS] Connected");
     dot.className = "connected";
-    loadSessions();
     applyMode();
     // Restore last known session from localStorage
     const savedSession = localStorage.getItem("pi_web_session");
@@ -960,8 +962,9 @@ function connect() {
     // Request current state and load history
     ws.send(JSON.stringify({type:"get_models"}));
     if (currentSessionFile) {
-      historyLoadPending = true;
+      ws.send(JSON.stringify({type:"load_history"}));
     }
+    loadSessions();
   };
   ws.onclose = (event) => {
     console.log("[WS] Closed", event.code, event.reason);

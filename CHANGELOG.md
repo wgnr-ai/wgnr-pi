@@ -2,6 +2,16 @@
 
 All notable changes to the public open-source release.
 
+## [1.2.3] - 2026-04-12
+
+### Fixed
+- Chat history now loads on page refresh and reconnect
+- Clicking the active session reloads its messages (no longer a silent no-op)
+- Added `load_history` message type for explicit history requests
+- Fixed server skipping history when Pi cancels a switch to the already-active session
+
+---
+
 ## [1.2.2] - 2026-04-12
 
 ### Fixed

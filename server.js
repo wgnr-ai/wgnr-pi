@@ -141,6 +141,8 @@ app.get("/manifest.json", (_req, res) => {
 });
 
 
+
+
 // Session list REST endpoint
 app.get("/api/sessions", (_req, res) => {
   try {
@@ -348,6 +350,13 @@ async function handleClientMessage(ws, msg) {
       sendRpc("switch_session", { sessionPath: msg.sessionPath });
       break;
 
+    case "load_history":
+      if (busy) return;
+      ensurePi();
+      historyLoadPending = true;
+      sendRpc("get_messages", {});
+      break;
+
     case "set_session_name":
       if (typeof msg.name !== "string") return;
       ensurePi();
@@ -544,12 +553,13 @@ function handleRpcEvent(data) {
         broadcast({ type: "available_models", models: data.data.models });
       }
 
-      if (data.command === "switch_session" && data.success && !data.data?.cancelled) {
-        // Load messages for the newly switched session
+      if (data.command === "switch_session" && data.success) {
+        const cancelled = data.data?.cancelled;
+        // Load messages for the newly switched session (or re-load if same session)
         historyLoadPending = true;
         sendRpc("get_messages", {});
         sendRpc("get_state", {});
-        broadcast({ type: "session_switched" });
+        if (!cancelled) broadcast({ type: "session_switched" });
         pendingRequests.delete("switch_session_path");
       }
 
