@@ -2,6 +2,15 @@
 
 All notable changes to the public open-source release.
 
+## [1.2.2] - 2026-04-12
+
+### Fixed
+- Unified "New chat" button — same position and style across all tabs
+- Button no longer jumps or disappears when switching between Pi and wgnr.ai/kelle.ai
+- Label updates contextually ("New chat" / "New wgnr.ai chat" / "New kelle.ai chat")
+
+---
+
 ## [1.2.1] - 2026-04-12
 
 ### Fixed
