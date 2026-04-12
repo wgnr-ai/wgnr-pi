@@ -1,22 +1,12 @@
 /**
- * wgnr-pi — A dual-engine web UI for Pi Coding Agent
+ * pi-web — Web UI for Pi Coding Agent
  *
  * Spawns `pi --mode rpc` as a subprocess and bridges JSON-RPC
  * to browser clients over WebSocket.
  *
- * Also provides a kelle.ai tab for free AI chat powered by kelle.ai.
- *
  * Usage:
- *   node server.js
- *   WGPI_PORT=8080 WGPI_CWD=/path node server.js
- *
- * Environment variables:
- *   WGPI_PORT        Server port (default: 4815)
- *   WGPI_HOST        Bind host (default: 0.0.0.0)
- *   WGPI_CWD         Working directory for pi (default: $HOME)
- *   WGPI_PI_BIN      Path to pi binary (default: "pi")
- *   WGPI_KELLE_URL   kelle.ai base URL (default: https://agents.kelle.ai)
- *   WGPI_KELLE_API_KEY  kelle.ai API key (optional, for Phase 2)
+ *   node server.js                          # defaults
+ *   PI_WEB_PORT=8080 PI_WEB_CWD=/path node server.js
  */
 
 import { spawn } from "node:child_process";
@@ -27,15 +17,10 @@ import express from "express";
 import { WebSocketServer } from "ws";
 
 // ── Config ──────────────────────────────────────────────────────────────
-const PORT = parseInt(process.env.WGPI_PORT || "4815", 10);
-const HOST = process.env.WGPI_HOST || "0.0.0.0";
-const CWD = process.env.WGPI_CWD || process.env.HOME;
-const PI_BIN = process.env.WGPI_PI_BIN || "pi";
+const PORT = parseInt(process.env.PI_WEB_PORT || "4815", 10);
+const HOST = process.env.PI_WEB_HOST || "0.0.0.0";
+const CWD = process.env.PI_WEB_CWD || process.env.HOME;
 const __dirname = dirname(fileURLToPath(import.meta.url));
-
-// kelle.ai config (Phase 2 — currently stub)
-const KELLE_URL = process.env.WGPI_KELLE_URL || "https://agents.kelle.ai";
-const KELLE_API_KEY = process.env.WGPI_KELLE_API_KEY || "";
 
 // ── State ───────────────────────────────────────────────────────────────
 let piProc = null;
@@ -44,6 +29,8 @@ const pendingRequests = new Map();
 let lineBuffer = "";
 const clients = new Set();
 let busy = false;
+let piConnected = false;
+let piHealthInterval = null;
 let cachedCommands = [];
 let currentSessionFile = null;
 let currentSessionId = null;
@@ -55,6 +42,7 @@ let currentThinkingLevel = "medium";
 function parseSessions() {
   const homeDir = process.env.HOME || "";
   const sessionBaseDir = join(homeDir, ".pi", "agent", "sessions");
+  // /Users/wgnr → --Users-wgnr--
   const cwdKey = "--" + CWD.replace(/^\//, "").replace(/\//g, "-") + "--";
   const sessionDir = join(sessionBaseDir, cwdKey);
 
@@ -82,7 +70,7 @@ function parseSessions() {
           if (entry.type === "session") {
             header = entry;
           } else if (entry.type === "session_info" && entry.name) {
-            name = entry.name;
+            name = entry.name; // keep latest
           } else if (entry.type === "message") {
             if (entry.message?.role === "user") {
               if (!firstUserMessage) {
@@ -142,8 +130,8 @@ app.get("/favicon.ico", (_req, res) => {
 app.get("/manifest.json", (_req, res) => {
   res.setHeader("Content-Type", "application/json");
   res.json({
-    name: "π · wgnr.ai",
-    short_name: "wgnr-pi",
+    name: "pi · wgnr.ai",
+    short_name: "pi",
     start_url: "/",
     display: "standalone",
     background_color: "#1a1a2e",
@@ -152,21 +140,6 @@ app.get("/manifest.json", (_req, res) => {
   });
 });
 
-// kelle.ai availability check (Phase 2 stub)
-app.get("/api/kelle/status", async (_req, res) => {
-  if (!KELLE_API_KEY) {
-    return res.json({ available: false, configured: false, message: "kelle.ai integration coming soon!" });
-  }
-  try {
-    const r = await fetch(`${KELLE_URL}/wp-json/mwai/v1/listChatbots`, {
-      headers: KELLE_API_KEY ? { "Authorization": `Bearer ${KELLE_API_KEY}` } : {},
-      signal: AbortSignal.timeout(3000),
-    });
-    res.json({ available: r.ok, configured: true });
-  } catch {
-    res.json({ available: false, configured: !!KELLE_API_KEY });
-  }
-});
 
 // Session list REST endpoint
 app.get("/api/sessions", (_req, res) => {
@@ -197,7 +170,7 @@ app.get("/api/sessions/archived", (_req, res) => {
             else if (e.type === "session_info" && e.name) name = e.name;
             else if (e.type === "message" && e.message?.role === "user" && !firstUserMessage) {
               const c = e.message.content;
-              firstUserMessage = typeof c === "string" ? c.slice(0,80) : (Array.isArray(c) ? (c.find(b=>b.type==="text")?.text||"").slice(0,80) : "");
+              firstUserMessage = typeof c === "string" ? c.slice(0,80) : (Array.isArray(c) ? (c.find(b=>b.type==="text")?.text||"" ).slice(0,80) : "");
             }
             if (e.timestamp) lastTimestamp = e.timestamp;
           } catch {}
@@ -224,7 +197,7 @@ app.post("/api/sessions/restore", (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Archive session
+// Archive session (move to archived/ subfolder)
 app.post("/api/sessions/archive", (req, res) => {
   const { file } = req.body || {};
   if (!file || !file.endsWith(".jsonl")) return res.status(400).json({ error: "Invalid file" });
@@ -263,6 +236,8 @@ app.post("/api/restart", (_req, res) => {
       piProc = null;
     }
     busy = false;
+    setPiHealth(false);
+    broadcast({ type: "status", busy: false, piConnected: false });
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -270,16 +245,14 @@ app.post("/api/restart", (_req, res) => {
 });
 
 const server = app.listen(PORT, HOST, () => {
-  console.log(`✓ wgnr-pi http://${HOST}:${PORT}`);
-  console.log(`  CWD:   ${CWD}`);
-  console.log(`  Pi:    ${PI_BIN}`);
-  console.log(`  Docs:  https://github.com/wgnr-ai/wgnr-pi`);
+  console.log(`✓ pi-web http://${HOST}:${PORT}`);
 });
 
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
     console.error(`❌ Port ${PORT} is already in use.`);
-    console.error('   Make sure no other instance of wgnr-pi is running.');
+    console.error('   Make sure no other instance of pi-web is running.');
+    console.error('   Run: ./pi-web.sh stop');
     process.exit(1);
   } else {
     console.error('Server error:', err);
@@ -292,7 +265,7 @@ const wss = new WebSocketServer({ server, path: "/ws" });
 
 wss.on("connection", (ws) => {
   clients.add(ws);
-  ws.send(JSON.stringify({ type: "status", busy, connected: true }));
+  ws.send(JSON.stringify({ type: "status", busy, connected: true, piConnected }));
   if (cachedCommands.length > 0) {
     ws.send(JSON.stringify({ type: "commands", commands: cachedCommands }));
   }
@@ -410,10 +383,29 @@ async function handleClientMessage(ws, msg) {
 }
 
 // ── Pi RPC subprocess ──────────────────────────────────────────────────
+function setPiHealth(connected) {
+  const changed = piConnected !== connected;
+  piConnected = connected;
+  if (changed) {
+    broadcast({ type: "pi_health", connected, busy });
+    console.log(`  pi health: ${connected ? "CONNECTED" : "DISCONNECTED"}`);
+  }
+}
+
+function startPiHeartbeat() {
+  if (piHealthInterval) clearInterval(piHealthInterval);
+  piHealthInterval = setInterval(() => {
+    if (!piProc || piProc.killed) {
+      setPiHealth(false);
+    }
+  }, 10000);
+}
+
 function ensurePi() {
   if (piProc && !piProc.killed) return;
 
-  console.log(`→ spawning ${PI_BIN} --mode rpc`);
+  console.log("→ spawning pi --mode rpc");
+  setPiHealth(false);
   piProc = spawn(PI_BIN, ["--mode", "rpc"], {
     cwd: CWD,
     stdio: ["pipe", "pipe", "pipe"],
@@ -444,12 +436,15 @@ function ensurePi() {
 
   piProc.on("error", (err) => {
     console.error("  pi spawn error:", err.message);
+    setPiHealth(false);
+    broadcast({ type: "error", message: `Pi failed to start: ${err.message}. Click ↻ to retry.` });
   });
 
+  // Debug: log when stdout closes
   piProc.stdout.on("end", () => {
     console.log("  [DEBUG] pi stdout ended");
   });
-
+  
   piProc.stdin.on("error", (err) => {
     console.error("  [DEBUG] pi stdin error:", err.message);
   });
@@ -458,9 +453,14 @@ function ensurePi() {
   setTimeout(() => {
     if (piProc && !piProc.killed) {
       console.log("  requesting initial state from pi...");
+      setPiHealth(true);
+      startPiHeartbeat();
       sendRpc("get_commands", {});
       sendRpc("get_state", {});
       sendRpc("get_available_models", {});
+    } else {
+      setPiHealth(false);
+      broadcast({ type: "error", message: "Pi exited immediately. Click ↻ to retry." });
     }
   }, 1500);
 
@@ -468,6 +468,7 @@ function ensurePi() {
     console.log(`→ pi exited (code ${code}, signal ${signal})`);
     piProc = null;
     busy = false;
+    setPiHealth(false);
     broadcast({ type: "status", busy: false, connected: false });
     setTimeout(() => { if (!piProc) ensurePi(); }, 3000);
   });
@@ -544,11 +545,16 @@ function handleRpcEvent(data) {
       }
 
       if (data.command === "switch_session" && data.success && !data.data?.cancelled) {
+        // Load messages for the newly switched session
         historyLoadPending = true;
         sendRpc("get_messages", {});
         sendRpc("get_state", {});
         broadcast({ type: "session_switched" });
         pendingRequests.delete("switch_session_path");
+      }
+
+      if (data.command === "new_session" && data.success && !data.data?.cancelled) {
+        // get_state already scheduled via handleClientMessage timeout
       }
     }
     return;
@@ -608,4 +614,6 @@ process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
 
 // ── Boot ────────────────────────────────────────────────────────────────
+console.log(`  CWD:   ${CWD}`);
+console.log(`  Port:  ${PORT}`);
 ensurePi();

@@ -363,6 +363,19 @@
   .cmd-badge { font-size: 10px; padding: 2px 7px; border-radius: 10px; background: #1a2540; white-space: nowrap; flex-shrink: 0; }
   .cmd-desc { font-size: 12px; color: var(--text-dim); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+  /* ── Pi health banner ── */
+  #pi-health-banner {
+    display: none; padding: 8px 14px; text-align: center; font-size: 13px;
+    background: #3a1a0a; border-bottom: 1px solid #5c2a0a; color: var(--accent2);
+    flex-shrink: 0; gap: 8px; align-items: center; justify-content: center;
+  }
+  #pi-health-banner.visible { display: flex; }
+  #pi-health-banner .health-restart {
+    background: var(--accent2); color: #1a1a2e; border: none; padding: 3px 10px;
+    border-radius: 5px; font-size: 12px; cursor: pointer; font-weight: 600;
+  }
+  #pi-health-banner .health-restart:hover { background: #c4a030; }
+
   /* ── Scrollbar ── */
   #messages::-webkit-scrollbar { width: 6px; }
   #messages::-webkit-scrollbar-track { background: transparent; }
@@ -480,6 +493,10 @@
 
   <!-- ── Main content ── -->
   <div id="content">
+    <div id="pi-health-banner">
+      <span id="health-msg">⚠ Pi disconnected. Attempting to reconnect…</span>
+      <button class="health-restart" onclick="restartPi()">↻ Restart now</button>
+    </div>
     <div id="messages"></div>
     <div id="stats-bar"></div>
 
@@ -966,10 +983,36 @@ function handleEvent(data) {
     case "status":
       streaming = data.busy;
       dot.className = data.busy ? "busy connected" : "connected";
-      abortBtn.disabled = !data.busy;
-      sendBtn.disabled = data.busy;
-      sendBtn.innerHTML = data.busy ? '<span class="spinner"></span>' : "Send";
+      if (data.piConnected === false) {
+        dot.className = "";
+        showHealthBanner("⚠ Pi disconnected. Attempting to reconnect…");
+        abortBtn.disabled = true;
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = "Disconnected";
+      } else {
+        hideHealthBanner();
+        abortBtn.disabled = !data.busy;
+        sendBtn.disabled = data.busy;
+        sendBtn.innerHTML = data.busy ? '<span class="spinner"></span>' : "Send";
+      }
       if (data.aborted) { currentAssistantEl = null; currentThinkingEl = null; addMsg("system", "Aborted.", true); }
+      break;
+
+    case "pi_health":
+      if (data.connected) {
+        hideHealthBanner();
+        dot.className = "connected";
+        if (mode === "pi") {
+          sendBtn.disabled = streaming;
+          sendBtn.innerHTML = streaming ? '<span class="spinner"></span>' : "Send";
+        }
+      } else {
+        dot.className = "";
+        showHealthBanner("⚠ Pi disconnected. Attempting to reconnect…");
+        abortBtn.disabled = true;
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = "Disconnected";
+      }
       break;
 
     case "error":
@@ -1242,6 +1285,25 @@ function toggleThinking() {
   document.querySelectorAll(".msg.thinking").forEach(el => { el.style.display = thinkingHidden ? "none" : ""; });
 }
 
+// ── Pi health helpers ──────────────────────────────────────────────────────
+const healthBanner = () => document.getElementById("pi-health-banner");
+const healthMsg = () => document.getElementById("health-msg");
+function showHealthBanner(msg) {
+  const b = healthBanner(), m = healthMsg();
+  if (b) b.classList.add("visible");
+  if (m) m.textContent = msg;
+}
+function hideHealthBanner() {
+  const b = healthBanner();
+  if (b) b.classList.remove("visible");
+}
+function restartPi() {
+  fetch("/api/restart", {method:"POST"}).then(r => r.json()).then(d => {
+    if (d.ok) showHealthBanner("Restarting Pi…");
+    else showHealthBanner("⚠ Restart failed: " + (d.error || "unknown"));
+  }).catch(() => showHealthBanner("⚠ Restart failed"));
+}
+
 // ── Event wiring ──────────────────────────────────────────────────────────
 sendBtn.addEventListener("click", sendPrompt);
 
@@ -1281,12 +1343,7 @@ abortBtn.addEventListener("click", () => {
   ws.send(JSON.stringify({type:"abort"}));
 });
 
-$("#btn-restart").addEventListener("click", () => {
-  fetch("/api/restart", {method:"POST"}).then(r => r.json()).then(d => {
-    if (d.ok) addMsg("system", "Pi connection restarted.", true);
-    else addMsg("error", `⚠ Restart failed: ${d.error}`, true);
-  }).catch(() => addMsg("error", "⚠ Restart failed", true));
-});
+$("#btn-restart").addEventListener("click", restartPi);
 
 $("#btn-clear").addEventListener("click", () => {
   msgs.innerHTML = "";
