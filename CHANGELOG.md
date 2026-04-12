@@ -2,6 +2,16 @@
 
 All notable changes to the public open-source release.
 
+## [1.2.1] - 2026-04-12
+
+### Fixed
+- Session state now saved to localStorage — survives page refresh and server restart
+- Sidebar auto-scrolls to the active session after loading
+- Active session highlighted correctly after reconnect
+- Session list reloads after switching sessions
+
+---
+
 ## [1.2.0] - 2026-04-12
 
 ### Added

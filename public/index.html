@@ -710,6 +710,8 @@ function renderSessionList(sessions, activeFile) {
       openSessionMenu(btn, btn.dataset.file, btn.dataset.file === currentSessionFile);
     });
   });
+  // Auto-scroll to active session after render
+  scrollToActiveSession();
 }
 
 function switchSession(sessionPath) {
@@ -950,10 +952,15 @@ function connect() {
     dot.className = "connected";
     loadSessions();
     applyMode();
-    // Reload current session history after reconnect
+    // Restore last known session from localStorage
+    const savedSession = localStorage.getItem("pi_web_session");
+    if (savedSession && !currentSessionFile) {
+      currentSessionFile = savedSession;
+    }
+    // Request current state and load history
+    ws.send(JSON.stringify({type:"get_models"}));
     if (currentSessionFile) {
       historyLoadPending = true;
-      ws.send(JSON.stringify({type:"get_models"}));
     }
   };
   ws.onclose = (event) => {
@@ -1004,12 +1011,12 @@ function handleEvent(data) {
         dot.className = "connected";
         if (mode === "pi") {
           sendBtn.disabled = streaming;
-          sendBtn.innerHTML = streaming ? '<span class="spinner"></span>' : "Send";
-        }
+        sendBtn.innerHTML = streaming ? '<span class="spinner"></span>' : "Send";
       } else {
         dot.className = "";
         showHealthBanner("⚠ Pi disconnected. Attempting to reconnect…");
-        abortBtn.disabled = true;
+        if (mode === "pi") {
+          abortBtn.disabled = true;
         sendBtn.disabled = true;
         sendBtn.innerHTML = "Disconnected";
       }
@@ -1029,7 +1036,10 @@ function handleEvent(data) {
       break;
 
     case "session_state":
-      currentSessionFile = data.sessionFile || currentSessionFile;
+      if (data.sessionFile) {
+        currentSessionFile = data.sessionFile;
+        localStorage.setItem("pi_web_session", currentSessionFile);
+      }
       if (data.model) {
         currentModel = data.model;
         currentModelSupportsImages = Array.isArray(data.model.input) && data.model.input.includes("image");
@@ -1042,9 +1052,11 @@ function handleEvent(data) {
         currentThinkingLevel = data.thinkingLevel;
         updateThinkingBadge(data.thinkingLevel);
       }
+      // Highlight and scroll to active session in sidebar
       document.querySelectorAll(".session-item").forEach(item => {
         item.classList.toggle("active", item.dataset.file === currentSessionFile);
       });
+      scrollToActiveSession();
       break;
 
     case "model_state":
@@ -1069,6 +1081,7 @@ function handleEvent(data) {
     case "session_switched":
       msgs.innerHTML = ""; currentAssistantEl = null; currentThinkingEl = null;
       currentToolCalls = {}; streaming = false;
+      loadSessions();
       break;
 
     case "session_reset":
@@ -1302,6 +1315,14 @@ function restartPi() {
     if (d.ok) showHealthBanner("Restarting Pi…");
     else showHealthBanner("⚠ Restart failed: " + (d.error || "unknown"));
   }).catch(() => showHealthBanner("⚠ Restart failed"));
+}
+
+// ── Sidebar session helpers ──────────────────────────────────────────────
+function scrollToActiveSession() {
+  const active = sessionList.querySelector(".session-item.active");
+  if (active) {
+    active.scrollIntoView({block: "nearest", behavior: "smooth"});
+  }
 }
 
 // ── Event wiring ──────────────────────────────────────────────────────────
