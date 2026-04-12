@@ -255,6 +255,20 @@ app.delete("/api/sessions", (req, res) => {
   }
 });
 
+// Restart Pi subprocess
+app.post("/api/restart", (_req, res) => {
+  try {
+    if (piProc && !piProc.killed) {
+      piProc.kill("SIGTERM");
+      piProc = null;
+    }
+    busy = false;
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 const server = app.listen(PORT, HOST, () => {
   console.log(`✓ wgnr-pi http://${HOST}:${PORT}`);
   console.log(`  CWD:   ${CWD}`);

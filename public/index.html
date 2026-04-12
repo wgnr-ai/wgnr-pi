@@ -401,6 +401,8 @@
   </div>
 
   <div id="toolbar">
+    <button id="btn-restart" title="Restart Pi (⌃R)">↻</button>
+    <button id="btn-clear" title="Clear chat (⌃L)">✕</button>
     <button id="btn-help" title="Help (?)">?</button>
     <button id="btn-export" title="Export session">↓</button>
     <button id="btn-abort" title="Stop (Escape)" disabled>■ Stop</button>
@@ -420,6 +422,8 @@
       <tr><td>Enter</td><td>Send message</td></tr>
       <tr><td>Shift+Enter</td><td>New line</td></tr>
       <tr><td>Escape</td><td>Abort / Close</td></tr>
+      <tr><td>⌃R</td><td>Restart Pi connection</td></tr>
+      <tr><td>⌃L</td><td>Clear chat</td></tr>
       <tr><td>⌃T</td><td>Toggle thinking</td></tr>
       <tr><td>/</td><td>Slash commands</td></tr>
       <tr><td>?</td><td>This help</td></tr>
@@ -429,7 +433,7 @@
       <b style="color:var(--accent)">Model selector</b> — click the model badge in the header to switch models.<br>
       <b style="color:var(--accent)">Thinking level</b> — click the 🧠 badge to cycle off → minimal → low → medium → high.<br>
       <b style="color:var(--accent)">Images</b> — paste an image or click 📎 to attach.<br>
-      <b style="color:var(--accent2)">kelle.ai</b> — use the π / kelle.ai toggle in the sidebar for free AI chat.
+      <b style="color:var(--accent2)">kelle.ai</b> — use the π / kelle.ai toggle for free AI chat.
     </div>
   </div>
 </div>
@@ -500,10 +504,12 @@
 marked.setOptions({ breaks: true, gfm: true });
 function md(text) {
   if (!text) return "";
-  const raw = marked.parse(String(text));
-  return typeof DOMPurify !== "undefined"
-    ? DOMPurify.sanitize(raw, { USE_PROFILES: { html: true } })
-    : raw;
+  let raw = marked.parse(String(text));
+  if (typeof DOMPurify !== "undefined")
+    raw = DOMPurify.sanitize(raw, { USE_PROFILES: { html: true } });
+  // Force all links to open in new tab
+  raw = raw.replace(/<a\s+/g, '<a target="_blank" rel="noopener noreferrer" ');
+  return raw;
 }
 function esc(s) {
   return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
@@ -531,8 +537,7 @@ let thinkingHidden = false;
 let allCommands = [], filteredCmds = [], activeCmdIndex = -1;
 let currentSessionFile = null;
 let sidebarOpen = window.innerWidth > 768;
-let mode = localStorage.getItem("pi_web_mode") || "pi"; if (mode === "a0") mode = "pi"; // migrate old A0 mode
-// kelle.ai state (Phase 2 stub)
+let mode = localStorage.getItem("pi_web_mode") || "pi"; if (mode === "a0") mode = "pi";
 let kelleBusyState = false, kelleConfigured = false;
 let currentModel = null, currentThinkingLevel = null;
 let currentModelSupportsImages = true;
@@ -928,6 +933,11 @@ function connect() {
     dot.className = "connected";
     loadSessions();
     applyMode();
+    // Reload current session history after reconnect
+    if (currentSessionFile) {
+      historyLoadPending = true;
+      ws.send(JSON.stringify({type:"get_models"}));
+    }
   };
   ws.onclose = (event) => {
     console.log("[WS] Closed", event.code, event.reason);
@@ -1168,19 +1178,21 @@ function applyMode() {
   document.getElementById("mode-pi").classList.toggle("active", !isKelle);
   document.getElementById("mode-kelle").classList.toggle("active", isKelle);
   document.getElementById("session-list").style.display = isKelle ? "none" : "";
-  document.getElementById("kelle-sidebar").style.display = isKelle ? "flex" : "none";
+  document.getElementById("kelle-sidebar").style.display  = isKelle ? "flex" : "none";
   const archToggle = document.getElementById("archived-toggle");
   if (archToggle) archToggle.style.display = isKelle ? "none" : (archToggle.dataset.visible || "none");
   document.getElementById("new-chat-label").textContent = isKelle ? "New kelle.ai chat" : "New chat";
   input.placeholder = isKelle ? "Ask kelle.ai anything…" : "Ask pi anything… (type / for commands)";
   const busy = isKelle ? kelleBusyState : streaming;
-  sendBtn.disabled = isKelle ? true : busy; // kelle.ai stub — disabled until Phase 2
+  sendBtn.disabled = isKelle ? true : busy;
   sendBtn.innerHTML = busy ? '<span class="spinner"></span>' : "Send";
   abortBtn.disabled = isKelle ? true : !streaming;
   document.getElementById("btn-export").style.display = isKelle ? "none" : "";
   document.getElementById("btn-new-chat").style.display = isKelle ? "none" : "";
   document.getElementById("model-badge").style.display = isKelle ? "none" : "";
   document.getElementById("thinking-badge").style.display = isKelle ? "none" : "";
+  document.getElementById("btn-restart").style.display = isKelle ? "none" : "";
+  document.getElementById("btn-clear").style.display = isKelle ? "none" : "";
 }
 function switchMode(newMode) {
   if (mode === newMode) return;
@@ -1269,6 +1281,20 @@ abortBtn.addEventListener("click", () => {
   ws.send(JSON.stringify({type:"abort"}));
 });
 
+$("#btn-restart").addEventListener("click", () => {
+  fetch("/api/restart", {method:"POST"}).then(r => r.json()).then(d => {
+    if (d.ok) addMsg("system", "Pi connection restarted.", true);
+    else addMsg("error", `⚠ Restart failed: ${d.error}`, true);
+  }).catch(() => addMsg("error", "⚠ Restart failed", true));
+});
+
+$("#btn-clear").addEventListener("click", () => {
+  msgs.innerHTML = "";
+  currentAssistantEl = null; currentThinkingEl = null; currentToolCalls = {};
+  statsBar.classList.remove("visible");
+  addMsg("system", "Chat cleared. Session history preserved.", true);
+});
+
 $("#btn-new-chat").addEventListener("click", () => {
   if (!ws || ws.readyState !== 1) return;
   ws.send(JSON.stringify({type:"new_session"}));
@@ -1301,6 +1327,8 @@ document.addEventListener("keydown", e => {
   if (document.activeElement === input) return;
   if (e.key === "n" && e.ctrlKey) { e.preventDefault(); if (ws?.readyState===1) { ws.send(JSON.stringify({type:"new_session"})); } }
   if (e.key === "t" && e.ctrlKey) { e.preventDefault(); toggleThinking(); }
+  if (e.key === "r" && e.ctrlKey) { e.preventDefault(); document.getElementById("btn-restart").click(); }
+  if (e.key === "l" && e.ctrlKey) { e.preventDefault(); document.getElementById("btn-clear").click(); }
   if (e.key === "?" && !e.ctrlKey && !e.altKey) document.getElementById("help-modal").classList.add("open");
 });
 
