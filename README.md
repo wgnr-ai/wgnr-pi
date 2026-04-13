@@ -33,9 +33,16 @@ Then open [http://localhost:4815](http://localhost:4815) in your browser.
 - **Mobile responsive** — Full PWA with sidebar overlay, works on any device
 - **Auto-restart** — macOS launchd service for background operation
 
-### kelle.ai Engine (Cloud) — *Coming Soon*
+### kelle.ai Engine (Cloud)
 
-Free AI chat powered by [kelle.ai](https://kelle.ai), a full suite of AI models for businesses and professionals. No setup required — just click the kelle.ai tab and start chatting.
+Free AI chat powered by [kelle.ai](https://kelle.ai), embedded via AI Engine cross-site embed. The Business Squad — four specialized AI agents — routes your question to the right specialist:
+
+- **Brand Strategist** — positioning, messaging, competitive analysis, brand voice
+- **AI Adoption Pro** — AI tools, automation, implementation roadmaps
+- **Growth & Analytics Pro** — KPIs, dashboards, funnels, campaign measurement
+- **Content & Copy Pro** — headlines, emails, landing pages, ad copy, social posts
+
+Supports memory, session history, TTS, document generation, and more. No setup required — just click the kelle.ai tab.
 
 ## Configuration
 

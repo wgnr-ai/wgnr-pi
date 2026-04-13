@@ -2,6 +2,17 @@
 
 All notable changes to the public open-source release.
 
+## [1.3.0] - 2026-04-12
+
+### Added
+- kelle.ai Business Squad integration via AI Engine cross-site embed
+- Router agent with four specialists: Brand Strategist, AI Adoption Pro, Growth & Analytics Pro, Content & Copy Pro
+- kelle.ai tab now loads live chatbot with memory, sessions, TTS, and function calling
+- Pi input area and health banner hidden when in kelle.ai mode
+- Lazy-loads embed script on first tab switch to avoid unnecessary payload
+
+---
+
 ## [1.2.3] - 2026-04-12
 
 ### Fixed
