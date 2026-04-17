@@ -201,10 +201,6 @@
   .sdrop-confirm .btn-no:hover { background: #1a4a7a; color: var(--text); }
   #sessions-empty { padding: 16px 14px; font-size: 12px; color: #3d4a5c; text-align: center; }
 
-  /* kelle.ai embed */
-  #kelle-sidebar { flex: 1; display: none; flex-direction: column; overflow: hidden; }
-  #kelle-chatbot { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-  #agent-router { flex: 1; min-height: 0; }
   /* Archived sessions toggle */
   #archived-toggle {
     display: flex; align-items: center; gap: 6px;
@@ -411,11 +407,10 @@
   </div>
 
   <div id="toolbar">
-    <button id="btn-restart" title="Restart Pi (⌃R)">↻</button>
-    <button id="btn-clear" title="Clear chat (⌃L)">✕</button>
-    <button id="btn-help" title="Help (?)">?</button>
-    <button id="btn-export" title="Export session">↓</button>
-    <button id="btn-abort" title="Stop (Escape)" disabled>■ Stop</button>
+    <button id="btn-clear" title="Clear chat (Ctrl+L)">Clear</button>
+    <button id="btn-help" title="Help (?)">Help</button>
+    <button id="btn-export" title="Export session">Export Session</button>
+    <button id="btn-abort" title="Stop (Escape)" disabled>Stop</button>
   </div>
 </div>
 
@@ -443,7 +438,7 @@
       <b style="color:var(--accent)">Model selector</b> — click the model badge in the header to switch models.<br>
       <b style="color:var(--accent)">Thinking level</b> — click the 🧠 badge to cycle off → minimal → low → medium → high.<br>
       <b style="color:var(--accent)">Images</b> — paste an image or click 📎 to attach.<br>
-      <b style="color:var(--accent2)">kelle.ai</b> — use the π / kelle.ai toggle for free AI chat.
+
     </div>
   </div>
 </div>
@@ -467,10 +462,6 @@
         <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         <span id="new-chat-label">New chat</span>
       </button>
-      <div id="mode-switch">
-        <button class="mode-btn active" id="mode-pi" onclick="switchMode('pi')">π pi</button>
-        <button class="mode-btn" id="mode-kelle" onclick="switchMode('kelle')">kelle.ai</button>
-      </div>
     </div>
     <div id="session-list"><div id="sessions-empty">No sessions yet. Send a message to start a new chat.</div></div>
     <!-- Archived sessions toggle -->
@@ -478,18 +469,13 @@
       <span id="archived-chevron">▸</span> Archived
     </div>
     <div id="archived-list"></div>
-    <div id="kelle-sidebar">
-      <div id="kelle-chatbot">
-        <div id="agent-router"></div>
-      </div>
-    </div>
   </div>
 
   <!-- ── Main content ── -->
   <div id="content">
     <div id="pi-health-banner">
       <span id="health-msg">⚠ Pi disconnected. Attempting to reconnect…</span>
-      <button class="health-restart" onclick="restartPi()">↻ Restart now</button>
+      <button class="health-restart" onclick="location.reload()">↻ Refresh page</button>
     </div>
     <div id="messages"></div>
     <div id="stats-bar"></div>
@@ -507,7 +493,6 @@
       </div>
     </div>
   </div>
-
 </div>
 
 <script>
@@ -549,7 +534,7 @@ let allCommands = [], filteredCmds = [], activeCmdIndex = -1;
 let currentSessionFile = null;
 let sidebarOpen = window.innerWidth > 768;
 let mode = localStorage.getItem("pi_web_mode") || "pi"; if (mode === "a0") mode = "pi";
-let kelleBusyState = false, kelleConfigured = false;
+
 let currentModel = null, currentThinkingLevel = null;
 let currentModelSupportsImages = true;
 let allModels = [];
@@ -1008,14 +993,16 @@ function handleEvent(data) {
         dot.className = "connected";
         if (mode === "pi") {
           sendBtn.disabled = streaming;
-        sendBtn.innerHTML = streaming ? '<span class="spinner"></span>' : "Send";
+          sendBtn.innerHTML = streaming ? '<span class="spinner"></span>' : "Send";
+        }
       } else {
         dot.className = "";
         showHealthBanner("⚠ Pi disconnected. Attempting to reconnect…");
         if (mode === "pi") {
           abortBtn.disabled = true;
-        sendBtn.disabled = true;
-        sendBtn.innerHTML = "Disconnected";
+          sendBtn.disabled = true;
+          sendBtn.innerHTML = "Disconnected";
+        }
       }
       break;
 
@@ -1227,31 +1214,23 @@ function sendPrompt() {
 
 // ── Mode management ───────────────────────────────────────────────────────
 function applyMode() {
-  const isKelle = mode === "kelle";
-  document.getElementById("mode-pi").classList.toggle("active", !isKelle);
-  document.getElementById("mode-kelle").classList.toggle("active", isKelle);
-  document.getElementById("session-list").style.display = isKelle ? "none" : "";
-  document.getElementById("kelle-sidebar").style.display  = isKelle ? "flex" : "none";
+  document.getElementById("mode-pi").classList.add("active");
+  document.getElementById("session-list").style.display = "";
   const archToggle = document.getElementById("archived-toggle");
-  if (archToggle) archToggle.style.display = isKelle ? "none" : (archToggle.dataset.visible || "none");
-  document.getElementById("new-chat-label").textContent = isKelle ? "New kelle.ai chat" : "New chat";
-  input.placeholder = isKelle ? "Ask kelle.ai anything…" : "Ask pi anything… (type / for commands)";
-  const busy = isKelle ? kelleBusyState : streaming;
-  sendBtn.disabled = isKelle ? true : busy;
-  sendBtn.innerHTML = busy ? '<span class="spinner"></span>' : "Send";
-  abortBtn.disabled = isKelle ? true : !streaming;
-  document.getElementById("btn-export").style.display = isKelle ? "none" : "";
-  document.getElementById("model-badge").style.display = isKelle ? "none" : "";
-  document.getElementById("thinking-badge").style.display = isKelle ? "none" : "";
-  document.getElementById("btn-restart").style.display = isKelle ? "none" : "";
-  document.getElementById("btn-clear").style.display = isKelle ? "none" : "";
-  document.getElementById("input-area").style.display = isKelle ? "none" : "";
-  document.getElementById("pi-health-banner").style.display = isKelle ? "none" : "";
-  // Initialize kelle.ai embed on first switch
-  if (isKelle && !window._kelleInitialized) {
-    window._kelleInitialized = true;
-    setTimeout(initKelleEmbed, 100);
-  }
+  if (archToggle) archToggle.style.display = archToggle.dataset.visible || "none";
+  document.getElementById("new-chat-label").textContent = "New chat";
+  input.placeholder = "Ask pi anything… (type / for commands)";
+  sendBtn.disabled = streaming;
+  sendBtn.innerHTML = streaming ? '<span class="spinner"></span>' : "Send";
+  abortBtn.disabled = !streaming;
+  document.getElementById("btn-export").style.display = "";
+  document.getElementById("model-badge").style.display = "";
+  document.getElementById("thinking-badge").style.display = "";
+  document.getElementById("btn-clear").style.display = "";
+  document.getElementById("input-area").style.display = "";
+  document.getElementById("pi-health-banner").style.display = "";
+  document.getElementById("messages").style.display = "";
+  document.getElementById("stats-bar").style.display = "";
 }
 function switchMode(newMode) {
   if (mode === newMode) return;
@@ -1313,12 +1292,6 @@ function hideHealthBanner() {
   const b = healthBanner();
   if (b) b.classList.remove("visible");
 }
-function restartPi() {
-  fetch("/api/restart", {method:"POST"}).then(r => r.json()).then(d => {
-    if (d.ok) showHealthBanner("Restarting Pi…");
-    else showHealthBanner("⚠ Restart failed: " + (d.error || "unknown"));
-  }).catch(() => showHealthBanner("⚠ Restart failed"));
-}
 
 // ── Sidebar session helpers ──────────────────────────────────────────────
 function scrollToActiveSession() {
@@ -1367,7 +1340,6 @@ abortBtn.addEventListener("click", () => {
   ws.send(JSON.stringify({type:"abort"}));
 });
 
-$("#btn-restart").addEventListener("click", restartPi);
 
 $("#btn-clear").addEventListener("click", () => {
   msgs.innerHTML = "";
@@ -1408,9 +1380,8 @@ document.addEventListener("keydown", e => {
   if (document.activeElement === input) return;
   if (e.key === "n" && e.ctrlKey) { e.preventDefault(); if (ws?.readyState===1) { ws.send(JSON.stringify({type:"new_session"})); } }
   if (e.key === "t" && e.ctrlKey) { e.preventDefault(); toggleThinking(); }
-  if (e.key === "r" && e.ctrlKey) { e.preventDefault(); document.getElementById("btn-restart").click(); }
   if (e.key === "l" && e.ctrlKey) { e.preventDefault(); document.getElementById("btn-clear").click(); }
-  if (e.key === "?" && !e.ctrlKey && !e.altKey) document.getElementById("help-modal").classList.add("open");
+  if (e.key === "?" && !e.ctrlKey && !e.altKey && document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') document.getElementById("help-modal").classList.add("open");
 });
 
 window.addEventListener("resize", applySidebarState);
@@ -1419,16 +1390,5 @@ window.addEventListener("resize", applySidebarState);
 connect();
 input.focus();
 </script>
-    <script src="https://agents.kelle.ai/wp-content/plugins/ai-engine-pro/app/embed.js"></script>
-    <script>
-      function initKelleEmbed() {
-        if (typeof MwaiChatbot !== 'undefined') {
-          MwaiChatbot.init({
-            botId: 'agent-router',
-            container: '#agent-router'
-          });
-        }
-      }
-    </script>
   </body>
 </html>

@@ -3,3 +3,5 @@ node_modules/
 *.bak
 .DS_Store
 a0-context-names.json
+icons/
+public/assets/

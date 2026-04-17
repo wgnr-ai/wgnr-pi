@@ -17,13 +17,15 @@ import express from "express";
 import { WebSocketServer } from "ws";
 
 // ── Config ──────────────────────────────────────────────────────────────
-const PORT = parseInt(process.env.PI_WEB_PORT || "4815", 10);
-const HOST = process.env.PI_WEB_HOST || "0.0.0.0";
-const CWD = process.env.PI_WEB_CWD || process.env.HOME;
+const PORT = parseInt(process.env.WGPI_PORT || "4815", 10);
+const HOST = process.env.WGPI_HOST || "0.0.0.0";
+const CWD = process.env.WGPI_CWD || process.env.HOME;
+const PI_BIN = process.env.WGPI_PI_BIN || "pi";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // ── State ───────────────────────────────────────────────────────────────
 let piProc = null;
+let restarting = false;
 let requestId = 0;
 const pendingRequests = new Map();
 let lineBuffer = "";
@@ -112,6 +114,7 @@ function parseSessions() {
 // ── Express ─────────────────────────────────────────────────────────────
 const app = express();
 app.use(express.json());
+app.use("/assets", express.static(join(__dirname, "public/assets")));
 
 app.get("/", (_req, res) => {
   res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -233,15 +236,18 @@ app.delete("/api/sessions", (req, res) => {
 // Restart Pi subprocess
 app.post("/api/restart", (_req, res) => {
   try {
-    if (piProc && !piProc.killed) {
-      piProc.kill("SIGTERM");
-      piProc = null;
-    }
+    restarting = true;
+    if (piProc && !piProc.killed) { piProc.kill("SIGTERM"); piProc = null; }
     busy = false;
     setPiHealth(false);
     broadcast({ type: "status", busy: false, piConnected: false });
+    setTimeout(() => {
+      ensurePi();
+      setTimeout(() => { restarting = false; }, 2000);
+    }, 500);
     res.json({ ok: true });
   } catch (e) {
+    restarting = false;
     res.status(500).json({ error: e.message });
   }
 });
@@ -469,7 +475,7 @@ function ensurePi() {
       sendRpc("get_available_models", {});
     } else {
       setPiHealth(false);
-      broadcast({ type: "error", message: "Pi exited immediately. Click ↻ to retry." });
+      if (!restarting) broadcast({ type: "error", message: "Pi exited immediately. Click Restart to retry." });
     }
   }, 1500);
 
