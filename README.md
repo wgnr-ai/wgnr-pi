@@ -100,4 +100,4 @@ node server.js
 
 ## Credits
 
-Built by [WGNR](https://wgnr.co). Looking for AI-powered business assistance? Try [wgnr.ai](https://wgnr.ai).
+Built by [WGNR](https://wgnr.co). For our AI Agent Squad subscription service that powers more than 200K small businesses, check out [kelle.ai(https://kelle.ai).
