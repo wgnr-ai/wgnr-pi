@@ -528,6 +528,7 @@ const imagePreviews = $("#image-previews");
 // ── State ─────────────────────────────────────────────────────────────────
 let ws = null, reconnectTimer = null;
 let streaming = false;
+const msgQueue = []; // Client-side message queue for sending while streaming
 let currentAssistantEl = null, currentThinkingEl = null, currentToolCalls = {};
 let thinkingHidden = false;
 let allCommands = [], filteredCmds = [], activeCmdIndex = -1;
@@ -697,7 +698,8 @@ function renderSessionList(sessions, activeFile) {
 }
 
 function switchSession(sessionPath) {
-  if (!ws || ws.readyState !== 1 || streaming) return;
+  if (!ws || ws.readyState !== 1) return;
+  msgQueue.length = 0;
   ws.send(JSON.stringify({type:"switch_session", sessionPath}));
 }
 
@@ -981,8 +983,8 @@ function handleEvent(data) {
       } else {
         hideHealthBanner();
         abortBtn.disabled = !data.busy;
-        sendBtn.disabled = data.busy;
         sendBtn.innerHTML = data.busy ? '<span class="spinner"></span>' : "Send";
+        sendBtn.disabled = false; // Always allow sending (queues if busy)
       }
       if (data.aborted) { currentAssistantEl = null; currentThinkingEl = null; addMsg("system", "Aborted.", true); }
       break;
@@ -991,18 +993,14 @@ function handleEvent(data) {
       if (data.connected) {
         hideHealthBanner();
         dot.className = "connected";
-        if (mode === "pi") {
-          sendBtn.disabled = streaming;
-          sendBtn.innerHTML = streaming ? '<span class="spinner"></span>' : "Send";
-        }
+        sendBtn.innerHTML = streaming ? '<span class="spinner"></span>' : "Send";
+        sendBtn.disabled = false;
       } else {
         dot.className = "";
         showHealthBanner("⚠ Pi disconnected. Attempting to reconnect…");
-        if (mode === "pi") {
-          abortBtn.disabled = true;
-          sendBtn.disabled = true;
-          sendBtn.innerHTML = "Disconnected";
-        }
+        abortBtn.disabled = true;
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = "Disconnected";
       }
       break;
 
@@ -1064,12 +1062,13 @@ function handleEvent(data) {
 
     case "session_switched":
       msgs.innerHTML = ""; currentAssistantEl = null; currentThinkingEl = null;
-      currentToolCalls = {}; streaming = false;
+      currentToolCalls = {}; streaming = false; msgQueue.length = 0;
       loadSessions();
       break;
 
     case "session_reset":
       msgs.innerHTML = ""; currentAssistantEl = null; currentThinkingEl = null; currentToolCalls = {};
+      msgQueue.length = 0;
       statsBar.classList.remove("visible");
       setTimeout(loadSessions, 1200);
       break;
@@ -1106,6 +1105,7 @@ function handleEvent(data) {
 
     case "agent_end":
       currentAssistantEl = null; currentThinkingEl = null; streaming = false;
+      flushQueue();
       setTimeout(loadSessions, 800);
       break;
 
@@ -1189,27 +1189,40 @@ function sendPrompt() {
   const text = input.value.trim();
   if (!text || !ws || ws.readyState !== 1) return;
   hideCmdPalette();
-  addUserMsg(text);
 
-  {
-    // Warn and strip images if model doesn't support vision
-    if (pendingImages.length && !currentModelSupportsImages) {
-      addMsg("error", `⚠ ${esc(currentModel?.name || "This model")} doesn't support images — sending text only.`, true);
-      pendingImages = []; imagePreviews.innerHTML = "";
-    }
-    const payload = {type:"prompt", text};
-    if (pendingImages.length) {
-      payload.images = pendingImages.map(img => ({
-        type: "image",
-        data: img.dataUrl.split(",")[1],
-        mimeType: img.mimeType,
-      }));
-    }
-    ws.send(JSON.stringify(payload));
+  // Strip images if model doesn't support vision
+  if (pendingImages.length && !currentModelSupportsImages) {
+    addMsg("error", `⚠ ${esc(currentModel?.name || "This model")} doesn't support images — sending text only.`, true);
+    pendingImages = []; imagePreviews.innerHTML = "";
+  }
+
+  const payload = {type:"prompt", text};
+  if (pendingImages.length) {
+    payload.images = pendingImages.map(img => ({
+      type: "image",
+      data: img.dataUrl.split(",")[1],
+      mimeType: img.mimeType,
+    }));
   }
 
   input.value = ""; input.style.height = "auto";
   pendingImages = []; imagePreviews.innerHTML = "";
+
+  if (streaming) {
+    // Queue the message — send when current response finishes
+    msgQueue.push({ payload, text });
+    addMsg("system", `Queued (${msgQueue.length} pending)`, true);
+    } else {
+    addUserMsg(text);
+    ws.send(JSON.stringify(payload));
+  }
+}
+
+function flushQueue() {
+  if (msgQueue.length === 0) return;
+  const { payload, text } = msgQueue.shift();
+  addUserMsg(text);
+  ws.send(JSON.stringify(payload));
 }
 
 // ── Mode management ───────────────────────────────────────────────────────
