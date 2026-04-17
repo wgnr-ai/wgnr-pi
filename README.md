@@ -4,7 +4,7 @@
 
 A polished, zero-framework web interface for interacting with Pi — the open-source AI coding agent. Built with vanilla JavaScript, Express, and WebSocket for real-time streaming responses.
 
-> Maintained by [WGNR](https://wgnr.co) · Powered by [kelle.ai](https://kelle.ai)
+> Open-source web UI for [Pi Coding Agent](https://github.com/badlogic/pi-mono) · [wgnr.ai](https://wgnr.ai)
 
 ---
 
@@ -100,6 +100,4 @@ node server.js
 
 ## Credits
 
-Built by [WGNR](https://wgnr.co) — the AI-powered brand and growth agency. 
-
-Looking for AI-powered business assistance? Try [kelle.ai](https://kelle.ai) — our squad of AI specialists for brand strategy, AI adoption, growth analytics, and content creation.
+Built by [WGNR](https://wgnr.co). Looking for AI-powered business assistance? Try [wgnr.ai](https://wgnr.ai).
