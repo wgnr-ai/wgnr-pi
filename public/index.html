@@ -529,7 +529,6 @@ const imagePreviews = $("#image-previews");
 // ── State ─────────────────────────────────────────────────────────────────
 let ws = null, reconnectTimer = null;
 let streaming = false;
-const msgQueue = []; // Client-side message queue for sending while streaming
 let currentAssistantEl = null, currentThinkingEl = null, currentToolCalls = {};
 let thinkingHidden = false;
 let allCommands = [], filteredCmds = [], activeCmdIndex = -1;
@@ -700,7 +699,6 @@ function renderSessionList(sessions, activeFile) {
 
 function switchSession(sessionPath) {
   if (!ws || ws.readyState !== 1) return;
-  msgQueue.length = 0;
   ws.send(JSON.stringify({type:"switch_session", sessionPath}));
 }
 
@@ -1063,13 +1061,12 @@ function handleEvent(data) {
 
     case "session_switched":
       msgs.innerHTML = ""; currentAssistantEl = null; currentThinkingEl = null;
-      currentToolCalls = {}; streaming = false; msgQueue.length = 0;
+      currentToolCalls = {}; streaming = false;
       loadSessions();
       break;
 
     case "session_reset":
       msgs.innerHTML = ""; currentAssistantEl = null; currentThinkingEl = null; currentToolCalls = {};
-      msgQueue.length = 0;
       statsBar.classList.remove("visible");
       setTimeout(loadSessions, 1200);
       break;
@@ -1106,7 +1103,6 @@ function handleEvent(data) {
 
     case "agent_end":
       currentAssistantEl = null; currentThinkingEl = null; streaming = false;
-      flushQueue();
       setTimeout(loadSessions, 800);
       break;
 
@@ -1209,21 +1205,8 @@ function sendPrompt() {
   input.value = ""; input.style.height = "auto";
   pendingImages = []; imagePreviews.innerHTML = "";
 
-  if (streaming) {
-    // Queue the message — send when current response finishes
-    msgQueue.push({ payload, text });
-    addUserMsg(text);
-    addMsg("system", `⏳ Queued — will send when response finishes`, true);
-    } else {
-    addUserMsg(text);
-    ws.send(JSON.stringify(payload));
-  }
-}
-
-function flushQueue() {
-  if (msgQueue.length === 0) return;
-  const { payload, text } = msgQueue.shift();
   addUserMsg(text);
+  if (streaming) addMsg("system", "⏳ Queued — will follow current response", true);
   ws.send(JSON.stringify(payload));
 }
 

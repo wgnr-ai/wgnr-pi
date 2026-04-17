@@ -312,17 +312,20 @@ async function handleClientMessage(ws, msg) {
   switch (msg.type) {
     case "prompt":
       if (!msg.text?.trim()) return;
-      if (busy) {
-        ws.send(JSON.stringify({ type: "error", message: "Agent is busy. Wait or press Stop." }));
-        return;
-      }
-      busy = true;
-      broadcast({ type: "status", busy: true });
-      broadcast({ type: "agent_start" });
       ensurePi();
-      const promptParams = { message: msg.text };
-      if (msg.images?.length) promptParams.images = msg.images;
-      sendRpc("prompt", promptParams);
+      if (busy) {
+        // Pi supports queuing via streamingBehavior
+        const qParams = { message: msg.text, streamingBehavior: "followUp" };
+        if (msg.images?.length) qParams.images = msg.images;
+        sendRpc("prompt", qParams);
+      } else {
+        busy = true;
+        broadcast({ type: "status", busy: true });
+        broadcast({ type: "agent_start" });
+        const promptParams = { message: msg.text };
+        if (msg.images?.length) promptParams.images = msg.images;
+        sendRpc("prompt", promptParams);
+      }
       break;
 
     case "abort":
