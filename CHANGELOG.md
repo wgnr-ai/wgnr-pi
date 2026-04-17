@@ -1,44 +1,51 @@
-# wgnr-pi Changelog (Public)
+# wgnr-pi Changelog
 
-All notable changes to the public open-source release.
+All notable changes to this project will be documented in this file.
+
+## [1.4.0] - 2026-04-15
+
+### Added
+- ROADMAP.md with v1–v3 feature plan
+- README.md with full feature comparison, quickstart, and credits
+
+### Changed
+- Toolbar buttons now use plain text labels (Clear, Help, Export Session, Stop)
+- Disconnected banner button changed from "Restart now" to "Refresh page"
+
+### Removed
+- All kelle.ai integration (tab, proxy, squad buttons, assets) — moved to v2.0 roadmap
+- Restart button removed — server auto-recovers Pi on crash
+- Mode toggle (π pi / kelle.ai) removed — single-mode Pi UI
+
+---
 
 ## [1.3.0] - 2026-04-12
 
 ### Added
-- kelle.ai Business Squad integration via AI Engine cross-site embed
-- Router agent with four specialists: Brand Strategist, AI Adoption Pro, Growth & Analytics Pro, Content & Copy Pro
-- kelle.ai tab now loads live chatbot with memory, sessions, TTS, and function calling
-- Pi input area and health banner hidden when in kelle.ai mode
-- Lazy-loads embed script on first tab switch to avoid unnecessary payload
+- kelle.ai Business Squad integration (later removed in v1.4.0)
 
 ---
 
 ## [1.2.3] - 2026-04-12
 
 ### Fixed
-- Chat history now loads on page refresh and reconnect
-- Clicking the active session reloads its messages (no longer a silent no-op)
-- Added `load_history` message type for explicit history requests
-- Fixed server skipping history when Pi cancels a switch to the already-active session
+- Chat history loads on page refresh and reconnect
+- Clicking active session reloads its messages
 
 ---
 
 ## [1.2.2] - 2026-04-12
 
 ### Fixed
-- Unified "New chat" button — same position and style across all tabs
-- Button no longer jumps or disappears when switching between Pi and wgnr.ai/kelle.ai
-- Label updates contextually ("New chat" / "New wgnr.ai chat" / "New kelle.ai chat")
+- Unified "New chat" button position and style across tabs
 
 ---
 
 ## [1.2.1] - 2026-04-12
 
 ### Fixed
-- Session state now saved to localStorage — survives page refresh and server restart
-- Sidebar auto-scrolls to the active session after loading
-- Active session highlighted correctly after reconnect
-- Session list reloads after switching sessions
+- Session state saved to localStorage — survives page refresh
+- Sidebar auto-scrolls to active session
 
 ---
 
@@ -46,47 +53,34 @@ All notable changes to the public open-source release.
 
 ### Added
 - Pi connection health monitoring with visual banner
-- "⚠ Pi disconnected" banner with countdown and ↻ Restart button
-- Automatic reconnect attempt when Pi subprocess dies
+- Automatic reconnect when Pi subprocess dies
 - Periodic heartbeat check (every 10 seconds)
-- Input disables with "Disconnected" label when Pi is unreachable
-- Spawn errors now shown to user instead of failing silently
 
 ---
 
 ## [1.1.0] - 2026-04-12
 
 ### Added
-- ↻ Restart button — kills and respawns Pi subprocess via `/api/restart` endpoint
-- ✕ Clear button — clears visible chat without losing session history
-- Keyboard shortcuts: `Ctrl+R` (restart), `Ctrl+L` (clear)
-- All markdown links now open in new browser tab (`target="_blank"`)
-- WebSocket reconnect now reloads session history automatically
-
-### Changed
-- Help modal updated with new keyboard shortcuts
+- Restart and Clear buttons with keyboard shortcuts
+- Markdown links open in new browser tabs
+- WebSocket reconnect reloads session history
 
 ---
 
 ## [1.0.0] - 2026-04-12
 
 ### Added
-- Initial public release
+- Initial release
 - Pi RPC bridge with real-time streaming via WebSocket
-- Session management: list, rename, archive, restore, delete with date grouping
-- Model picker with search, provider groups, vision support detection
+- Session management: list, rename, archive, restore, date grouping
+- Model picker with search and provider groups
 - Thinking level cycling (off → minimal → low → medium → high)
-- Image support: paste from clipboard or click to attach
+- Image support: paste or attach for vision-capable models
 - Slash command autocomplete palette
 - Markdown rendering (GFM + DOMPurify)
 - Session stats bar (tokens, cost, context usage)
 - Session export to JSON download
-- Mobile-responsive PWA with sidebar overlay
-- macOS launchd auto-start service (`wgnr-pi.sh`)
-- kelle.ai stub tab (Phase 2 integration coming soon)
-- All config via `WGPI_*` environment variables (no hardcoded paths)
-- Zero build step, 4 runtime dependencies (express, ws, marked, dompurify)
-- MIT license, published as `wgnr-pi` on npm
-
-### Removed
-- Agent Zero integration (private only — not in public release)
+- macOS launchd auto-start service
+- Configurable via `WGPI_*` environment variables
+- Zero build step, zero frameworks
+- MIT license
