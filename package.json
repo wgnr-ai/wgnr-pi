@@ -1,6 +1,6 @@
 {
   "name": "wgnr-pi",
-  "version": "1.0.0",
+  "version": "1.5.0",
   "description": "A dual-engine web UI for Pi Coding Agent with kelle.ai integration — by wgnr.ai",
   "type": "module",
   "bin": {
