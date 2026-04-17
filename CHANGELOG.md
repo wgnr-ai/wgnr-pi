@@ -2,7 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.4.0] - 2026-04-15
+## [1.5.0] - 2026-04-15
+
+### Added
+- Client-side message queue — type and send while Pi is still responding, messages auto-send one by one
+- Queued messages show user text with "⏳ Queued" indicator
+- Queue auto-flushes as each response completes
+- Queue clears on session switch or reset
+
+### Changed
+- Toolbar buttons now use recognized icons: ⌫ Clear, ? Help, ⤓ Export, ⏹ Stop
+- Toolbar icons enlarged (15px) with improved alignment
+- Send button stays enabled during streaming (supports queuing)
+
+---
 
 ### Added
 - ROADMAP.md with v1–v3 feature plan

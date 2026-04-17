@@ -79,10 +79,11 @@
   .thinking-icon { font-size: 11px; opacity: .7; }
 
   /* ── Toolbar ── */
-  #toolbar { display: flex; gap: 6px; flex-shrink: 0; }
+  #toolbar { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
   #toolbar button {
     background: var(--surface2); color: var(--text-dim); border: none;
-    padding: 5px 10px; border-radius: 6px; font-size: 12px; cursor: pointer;
+    padding: 4px 8px; border-radius: 6px; font-size: 15px; cursor: pointer;
+    line-height: 1; display: flex; align-items: center; gap: 4px;
   }
   #toolbar button:hover { color: var(--text); background: #1a4a7a; }
   #toolbar button:disabled { opacity: .4; cursor: default; }
@@ -407,10 +408,10 @@
   </div>
 
   <div id="toolbar">
-    <button id="btn-clear" title="Clear chat (Ctrl+L)">Clear</button>
-    <button id="btn-help" title="Help (?)">Help</button>
-    <button id="btn-export" title="Export session">Export Session</button>
-    <button id="btn-abort" title="Stop (Escape)" disabled>Stop</button>
+    <button id="btn-clear" title="Clear chat (Ctrl+L)">⌫</button>
+    <button id="btn-help" title="Help (?)">?</button>
+    <button id="btn-export" title="Export session">⤓</button>
+    <button id="btn-abort" title="Stop (Escape)" disabled>⏹</button>
   </div>
 </div>
 
@@ -1211,7 +1212,8 @@ function sendPrompt() {
   if (streaming) {
     // Queue the message — send when current response finishes
     msgQueue.push({ payload, text });
-    addMsg("system", `Queued (${msgQueue.length} pending)`, true);
+    addUserMsg(text);
+    addMsg("system", `⏳ Queued — will send when response finishes`, true);
     } else {
     addUserMsg(text);
     ws.send(JSON.stringify(payload));
