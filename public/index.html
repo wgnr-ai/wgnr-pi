@@ -339,6 +339,35 @@
   #send-btn .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #666; border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite; }
   @keyframes spin { to{transform:rotate(360deg)} }
 
+  /* ── Microphone / Speech-to-text ── */
+  .mic-group { position: relative; display: flex; align-items: flex-end; }
+  #mic-btn {
+    background: transparent; color: #888; border: 1px solid var(--surface2);
+    border-radius: 10px; padding: 0 12px; font-size: 18px; cursor: pointer;
+    transition: all .2s; height: 44px; flex-shrink: 0; line-height: 1;
+  }
+  #mic-btn:hover { color: var(--text); border-color: var(--accent); }
+  #mic-btn.recording {
+    color: #e74c3c; border-color: #e74c3c; background: rgba(231,76,60,.1);
+    animation: pulse-mic 1.2s ease-in-out infinite;
+  }
+  @keyframes pulse-mic {
+    0%,100% { box-shadow: 0 0 0 0 rgba(231,76,60,.3); }
+    50% { box-shadow: 0 0 0 8px rgba(231,76,60,0); }
+  }
+  #mic-settings {
+    position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+    background: var(--surface); border: 1px solid var(--surface2); border-radius: 8px;
+    padding: 4px; display: none; z-index: 100; white-space: nowrap; box-shadow: 0 4px 12px rgba(0,0,0,.3);
+  }
+  #mic-settings.open { display: block; }
+  #mic-settings button {
+    display: block; width: 100%; text-align: left; background: none; border: none;
+    color: var(--text); padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;
+  }
+  #mic-settings button:hover { background: var(--surface2); }
+  #mic-settings button.active { color: var(--accent); font-weight: 600; }
+
   /* ── Slash command palette ── */
   #cmd-palette {
     display: none; position: absolute; bottom: calc(100% + 6px); left: 0; right: 52px;
@@ -489,6 +518,16 @@
         <div id="input-buttons">
           <button id="attach-btn" title="Attach image (or paste)">📎</button>
           <input id="attach-input" type="file" accept="image/*" multiple>
+          <div class="mic-group">
+            <button id="mic-btn" title="Speech to text (right-click to change settings)">🎤</button>
+            <div id="mic-settings">
+              <button data-silence="0">Manual (press to stop)</button>
+              <button data-silence="500">Auto (0.5s silence)</button>
+              <button data-silence="750" class="active">Auto (0.75s silence)</button>
+              <button data-silence="1500">Auto (1.5s silence)</button>
+              <button data-silence="3000">Auto (3s silence)</button>
+            </div>
+          </div>
           <button id="send-btn">Send</button>
         </div>
       </div>
@@ -543,7 +582,18 @@ let pendingImages = [];
 let pendingModelSwitchMsg = null;
 
 // ── Markdown-based message helpers ────────────────────────────────────────
-function scrollBottom() { requestAnimationFrame(() => msgs.scrollTop = msgs.scrollHeight); }
+let userScrolledUp = false;
+let isRenaming = false;
+msgs.addEventListener('scroll', () => {
+  const atBottom = msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight < 100;
+  userScrolledUp = !atBottom;
+});
+
+function scrollBottom() {
+  if (!userScrolledUp) {
+    requestAnimationFrame(() => msgs.scrollTop = msgs.scrollHeight);
+  }
+}
 
 function addMsg(type, content, isHtml = false) {
   const div = document.createElement("div");
@@ -703,6 +753,7 @@ function switchSession(sessionPath) {
 }
 
 function startRename(item) {
+  isRenaming = true;
   const titleEl = item.querySelector(".session-title");
   const oldText = titleEl.textContent;
   const inp = document.createElement("input");
@@ -711,12 +762,13 @@ function startRename(item) {
   titleEl.replaceWith(inp); inp.focus(); inp.select();
   const save = () => {
     const name = inp.value.trim();
+    isRenaming = false;
     const div = document.createElement("div"); div.className = "session-title"; div.textContent = name || oldText; inp.replaceWith(div);
     if (name && name !== oldText && item.dataset.file === currentSessionFile && ws?.readyState === 1) {
       ws.send(JSON.stringify({type:"set_session_name", name})); setTimeout(loadSessions, 600);
     }
   };
-  const cancel = () => { const div = document.createElement("div"); div.className = "session-title"; div.textContent = oldText; inp.replaceWith(div); };
+  const cancel = () => { isRenaming = false; const div = document.createElement("div"); div.className = "session-title"; div.textContent = oldText; inp.replaceWith(div); };
   inp.addEventListener("blur", save);
   inp.addEventListener("keydown", e => { if (e.key==="Enter"){e.preventDefault();save();} if(e.key==="Escape"){inp.removeEventListener("blur",save);cancel();} });
 }
@@ -1186,6 +1238,7 @@ function sendPrompt() {
   const text = input.value.trim();
   if (!text || !ws || ws.readyState !== 1) return;
   hideCmdPalette();
+  userScrolledUp = false;  // user sent a message, they want to see the response
 
   // Strip images if model doesn't support vision
   if (pendingImages.length && !currentModelSupportsImages) {
@@ -1293,6 +1346,7 @@ function hideHealthBanner() {
 
 // ── Sidebar session helpers ──────────────────────────────────────────────
 function scrollToActiveSession() {
+  if (isRenaming) return;  // Don't interrupt rename
   const active = sessionList.querySelector(".session-item.active");
   if (active) {
     active.scrollIntoView({block: "nearest", behavior: "smooth"});
@@ -1387,6 +1441,161 @@ window.addEventListener("resize", applySidebarState);
 // ── Boot ──────────────────────────────────────────────────────────────────
 connect();
 input.focus();
+
+// ── Microphone / Whisper STT ────────────────────────────────────────────
+const micBtn = $("#mic-btn");
+const micSettings = $("#mic-settings");
+let mediaRecorder = null;
+let audioChunks = [];
+let micRecording = false;
+let micSilenceMs = 750;  // default auto-stop after 0.75s silence
+let analyser = null;
+let audioContext = null;
+let silenceCheckInterval = null;
+
+// Hide mic if browser doesn't support it
+if (!(navigator.mediaDevices?.getUserMedia)) {
+  if (micBtn) micBtn.style.display = "none";
+  if (micSettings) micSettings.style.display = "none";
+}
+
+if (micBtn) {
+  // Right-click / long-press to open silence settings
+  micBtn.addEventListener("contextmenu", e => {
+    e.preventDefault();
+    micSettings.classList.toggle("open");
+  });
+  let longPressTimer = null;
+  micBtn.addEventListener("touchstart", e => {
+    longPressTimer = setTimeout(() => {
+      e.preventDefault();
+      micSettings.classList.toggle("open");
+    }, 500);
+  });
+  micBtn.addEventListener("touchend", () => clearTimeout(longPressTimer));
+  micBtn.addEventListener("touchmove", () => clearTimeout(longPressTimer));
+
+  // Close settings on outside click
+  document.addEventListener("click", e => {
+    if (!micSettings.contains(e.target) && e.target !== micBtn) {
+      micSettings.classList.remove("open");
+    }
+  });
+
+  // Settings button clicks
+  micSettings.querySelectorAll("button").forEach(btn => {
+    btn.addEventListener("click", e => {
+      e.stopPropagation();
+      micSilenceMs = parseInt(btn.dataset.silence);
+      micSettings.querySelectorAll("button").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      micSettings.classList.remove("open");
+    });
+  });
+}
+
+function startSilenceDetection(stream) {
+  if (micSilenceMs === 0) return;  // manual mode
+  try {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioContext.createMediaStreamSource(stream);
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 512;
+    source.connect(analyser);
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    let silenceStart = null;
+    const threshold = 15;
+    silenceCheckInterval = setInterval(() => {
+      analyser.getByteFrequencyData(dataArray);
+      const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+      if (avg < threshold) {
+        if (!silenceStart) silenceStart = Date.now();
+        if (Date.now() - silenceStart >= micSilenceMs) {
+          stopRecording();
+        }
+      } else {
+        silenceStart = null;
+      }
+    }, 100);
+  } catch (e) {
+    console.warn("Silence detection unavailable:", e);
+  }
+}
+
+function stopSilenceDetection() {
+  if (silenceCheckInterval) { clearInterval(silenceCheckInterval); silenceCheckInterval = null; }
+  if (audioContext) { audioContext.close().catch(() => {}); audioContext = null; }
+  analyser = null;
+}
+
+function stopRecording() {
+  if (!micRecording) return;
+  micRecording = false;
+  stopSilenceDetection();
+  if (mediaRecorder && mediaRecorder.state === "recording") {
+    mediaRecorder.stop();
+  }
+  micBtn.classList.add("recording");  // keep active while processing
+  micBtn.textContent = "⏳";
+}
+
+if (micBtn) {
+  micBtn.addEventListener("click", async () => {
+    if (micSettings.classList.contains("open")) {
+      micSettings.classList.remove("open");
+      return;
+    }
+
+    if (micRecording) {
+      stopRecording();
+    } else {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioChunks = [];
+        mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+
+        mediaRecorder.ondataavailable = e => {
+          if (e.data.size > 0) audioChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+          stream.getTracks().forEach(t => t.stop());
+          const blob = new Blob(audioChunks, { type: "audio/webm" });
+          if (blob.size < 1000) {
+            micBtn.classList.remove("recording");
+            micBtn.textContent = "🎤";
+            return;
+          }
+          try {
+            const resp = await fetch("/api/transcribe", {
+              method: "POST",
+              headers: { "Content-Type": "audio/webm" },
+              body: blob,
+            });
+            const data = await resp.json();
+            if (data.text) {
+              input.value = input.value ? input.value + " " + data.text.trim() : data.text.trim();
+              input.style.height = "auto";
+              input.style.height = Math.min(input.scrollHeight, 150) + "px";
+            }
+          } catch (e) {
+            console.error("Transcription failed:", e);
+          }
+          micBtn.classList.remove("recording");
+          micBtn.textContent = "🎤";
+        };
+
+        mediaRecorder.start();
+        micRecording = true;
+        micBtn.classList.add("recording");
+        micBtn.textContent = "⏺";
+        startSilenceDetection(stream);
+      } catch (e) {
+        console.error("Mic access denied:", e);
+      }
+    }
+  });
+}
 </script>
   </body>
 </html>

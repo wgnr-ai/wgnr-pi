@@ -252,6 +252,38 @@ app.post("/api/restart", (_req, res) => {
   }
 });
 
+// ── Whisper Speech-to-Text ──────────────────────────────────────────────
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
+
+app.post("/api/transcribe", express.raw({ type: "audio/webm", limit: "25mb" }), async (req, res) => {
+  if (!OPENAI_API_KEY) return res.status(500).json({ error: "OPENAI_API_KEY not set" });
+  if (!req.body?.length) return res.status(400).json({ error: "No audio data" });
+  try {
+    const { default: fetch } = await import("node-fetch");
+    const FormData = (await import("form-data")).default;
+    const form = new FormData();
+    form.append("file", req.body, { filename: "audio.webm", contentType: "audio/webm" });
+    form.append("model", "whisper-1");
+    form.append("language", "en");
+    form.append("response_format", "json");
+    const r = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${OPENAI_API_KEY}`, ...form.getHeaders() },
+      body: form,
+    });
+    if (!r.ok) {
+      const errText = await r.text();
+      console.error("Whisper error:", r.status, errText);
+      return res.status(r.status).json({ error: `Whisper API error: ${r.status}` });
+    }
+    const data = await r.json();
+    res.json({ text: data.text || "" });
+  } catch (e) {
+    console.error("Transcription error:", e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 const server = app.listen(PORT, HOST, () => {
   console.log(`✓ pi-web http://${HOST}:${PORT}`);
 });

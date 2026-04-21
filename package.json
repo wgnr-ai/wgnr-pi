@@ -13,7 +13,9 @@
   "dependencies": {
     "dompurify": "^3.3.3",
     "express": "^5.1.0",
+    "form-data": "^4.0.5",
     "marked": "^18.0.0",
+    "node-fetch": "^3.3.2",
     "ws": "^8.18.0"
   },
   "keywords": [
