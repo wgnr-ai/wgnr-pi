@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.0] - 2026-04-21
+
+### Added
+- **🎤 Whisper speech-to-text** — OpenAI Whisper integration replaces browser Web Speech API
+  - Click mic button to record, auto-transcribes to input field
+  - Configurable silence detection: manual, 0.5s, 0.75s (default), 1.5s, 3s
+  - Right-click or long-press mic button to change settings
+  - Requires `OPENAI_API_KEY` environment variable
+- **Smart auto-scroll** — only scrolls when user is at bottom of chat
+  - Scrolling up pauses auto-scroll so you can read
+  - Sending a message re-enables auto-scroll
+- **Session rename fix** — renaming a session no longer interrupted by scroll-to-active
+
+### Changed
+- Added `node-fetch` and `form-data` dependencies for Whisper API
+- Auto-scroll behavior improved from simple always-scroll to scroll-aware
+
+---
+
 ## [1.5.0] - 2026-04-15
 
 ### Added

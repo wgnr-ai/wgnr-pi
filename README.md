@@ -15,13 +15,15 @@ A polished, zero-framework web interface for interacting with Pi — the open-so
 - **Model picker** — Full modal with search, provider groups, and keyboard navigation
 - **Thinking levels** — Cycle through off → minimal → low → medium → high with a UI badge
 - **Image support** — Paste or attach images for vision-capable models
+- **Speech-to-text** — Whisper-powered dictation with configurable silence detection
 - **Command palette** — Slash commands with autocomplete (type `/`)
 - **Session persistence** — History reloads automatically on reconnect
+- **Smart auto-scroll** — Pauses when you scroll up, resumes when you send
 - **Pi health monitoring** — Connection status with auto-reconnect
 - **Export sessions** — Download any session as markdown
 - **Keyboard shortcuts** — Ctrl+N (new chat), Ctrl+L (clear), Escape (stop)
 - **macOS launchd** — Auto-start on boot via included service template
-- **Zero dependencies** — No React, no Vite, no build step. Just Node.js
+- **Lightweight** — 4 runtime dependencies. No React, no Vite, no build step
 
 ## Quick Start
 
@@ -48,6 +50,7 @@ All settings are configurable via environment variables:
 | `WGPI_HOST` | `0.0.0.0` | Server bind address |
 | `WGPI_CWD` | `~` | Working directory for Pi |
 | `WGPI_PI_BIN` | `pi` | Path to Pi binary |
+| `OPENAI_API_KEY` | — | OpenAI API key for Whisper speech-to-text |
 
 Example:
 
@@ -78,6 +81,7 @@ wgnr-pi spawns Pi as a subprocess in RPC mode and communicates via stdin/stdout 
 | Model picker | Status bar switch | **Full modal with search** |
 | Thinking levels | No | **Yes — 5 levels with badge** |
 | Image support | Unknown | **Paste, attach, vision** |
+| Speech-to-text | No | **Whisper with silence detection** |
 | Command palette | No | **Slash commands + autocomplete** |
 | Session history | Browse past | **Browse + load full history** |
 | Export sessions | No | **Markdown export** |

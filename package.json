@@ -1,7 +1,7 @@
 {
   "name": "wgnr-pi",
-  "version": "1.5.2",
-  "description": "A feature-rich web UI for Pi Coding Agent — by wgnr.ai",
+  "version": "1.6.0",
+  "description": "A feature-rich web UI for Pi Coding Agent \u2014 by wgnr.ai",
   "type": "module",
   "bin": {
     "wgnr-pi": "./bin/wgnr-pi.js"
