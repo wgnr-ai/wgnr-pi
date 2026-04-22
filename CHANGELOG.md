@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.1] - 2026-04-22
+
+### Fixed
+- **GitHub Issues #1, #3** — Fixed 404 errors when installed via npm/npx under dot-directory paths (e.g., `.nvm`, `.npm`)
+  - Added `dotfiles: "allow"` option to all `express.static()` and `res.sendFile()` calls
+  - Express 5's `send` module blocks dotfile paths by default; this fix allows wgnr-pi to work when installed under paths containing dot-directories
+- **GitHub Issue #2** — Fixed `spawn pi ENOENT` error on Windows
+  - Added `shell: process.platform === "win32"` to spawn options
+  - Windows requires shell mode to resolve `.cmd` wrapper scripts for the `pi` binary
+- **GitHub Issue #3 (Bug 2)** — Fixed module resolution when dependencies are hoisted (npx)
+  - Added dynamic module path resolution using `createRequire(import.meta.url)`
+  - `marked` and `dompurify` paths are now resolved at runtime, handling both flat and nested `node_modules` structures
+
+---
+
 ## [1.6.0] - 2026-04-21
 
 ### Added

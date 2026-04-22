@@ -13,6 +13,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import express from "express";
 import { WebSocketServer } from "ws";
 
@@ -22,6 +23,28 @@ const HOST = process.env.WGPI_HOST || "0.0.0.0";
 const CWD = process.env.WGPI_CWD || process.env.HOME;
 const PI_BIN = process.env.WGPI_PI_BIN || "pi";
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// ── Module path resolution (handles hoisted node_modules via npx) ──────────
+const _require = createRequire(import.meta.url);
+
+function resolveModuleFile(pkgName, subpath) {
+  try {
+    const mainPath = _require.resolve(pkgName);
+    // Walk up to find the package root (where package.json lives)
+    let dir = dirname(mainPath);
+    while (dir !== dirname(dir)) {
+      if (existsSync(join(dir, "package.json"))) break;
+      dir = dirname(dir);
+    }
+    return join(dir, subpath);
+  } catch {
+    // Fallback: assume package is installed alongside this package
+    return join(__dirname, "node_modules", pkgName, subpath);
+  }
+}
+
+const MARKED_UMD_PATH = resolveModuleFile("marked", "lib/marked.umd.js");
+const DOMPURIFY_PATH = resolveModuleFile("dompurify", "dist/purify.js");
 
 // ── State ───────────────────────────────────────────────────────────────
 let piProc = null;
@@ -114,16 +137,16 @@ function parseSessions() {
 // ── Express ─────────────────────────────────────────────────────────────
 const app = express();
 app.use(express.json());
-app.use("/assets", express.static(join(__dirname, "public/assets")));
+app.use("/assets", express.static(join(__dirname, "public/assets"), { dotfiles: "allow" }));
 
 app.get("/", (_req, res) => {
   res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.sendFile(join(__dirname, "public", "index.html"));
+  res.sendFile(join(__dirname, "public", "index.html"), { dotfiles: "allow" });
 });
 
-// Serve bundled JS libs
-app.get("/lib/marked.umd.js", (_req, res) => res.sendFile(join(__dirname, "node_modules/marked/lib/marked.umd.js")));
-app.get("/lib/purify.js", (_req, res) => res.sendFile(join(__dirname, "node_modules/dompurify/dist/purify.js")));
+// Serve bundled JS libs (resolved dynamically to handle hoisted node_modules)
+app.get("/lib/marked.umd.js", (_req, res) => res.sendFile(MARKED_UMD_PATH, { dotfiles: "allow" }));
+app.get("/lib/purify.js", (_req, res) => res.sendFile(DOMPURIFY_PATH, { dotfiles: "allow" }));
 
 app.get("/favicon.ico", (_req, res) => {
   res.setHeader("Content-Type", "image/svg+xml");
@@ -460,6 +483,7 @@ function ensurePi() {
     cwd: CWD,
     stdio: ["pipe", "pipe", "pipe"],
     env: { ...process.env },
+    shell: process.platform === "win32",
   });
 
   console.log(`  pi PID: ${piProc.pid}`);
